@@ -21,3 +21,12 @@ There are five buttons on the remote. Here is what they will send to ZHA (simpli
 3. The 'left' and 'right' buttons, with arrows. Short-pressing these will cycle through a list of five commands that differ only in a number parameter. Which number is sent is tracked by the remote. The command will not tell you which button was pressed, this can only be derived by comparing it to the previous time this command was sent. The behavior on long-pressing is analog to the up and down buttons, in this case there are specific commands for each button, and again the release command is shared between the buttons, but distinct from the up-down release.
 4. The up, down, left and right buttons actually send two separate ZHA events when pressed, with slightly different information. Only one event per press is used by the automation.
 
+## Known issues
+These are shortcomings of the blueprint that I am aware of but haven't solved yet, mostly for lack of time to do everything. Suggestions for solutions and/or pull requests are welcome!:
+
+- Even though it is not used in the first mode, you still need to select a light entity if you use that mode, or errors will prevent the blueprint from running. Surely this can be solved with the correct default templating but I haven't given that priority.
+- There is no checking whether the selected entities actually support the chosen modes (you can select a light that can only be switched on/off for example)
+- It's not possible to select other targets than entities. The 'target' selector is IMHO much nicer but it is more complex to program. This is because of the template that reads the current color value of the lights.
+- There is currently no option for RGB or XY color, or color temperature in other units than K
+- For RGBWW lights, there's no option for switching between color and white modes
+- There's a lot of parameters that cannot yet be configured in the blueprint but are simply chosen or not used in the code. E.g. some underlying assumptions about color temperature range, ratios of continuous vs single step sizes, transition times, saturation values for color, maximum nr of steps in continuous mode, etc. There's also a trade-off here between overwhelming users with a zillion parameters and giving control.
