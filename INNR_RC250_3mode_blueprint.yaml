@@ -1,16 +1,17 @@
 #A blueprint for Home Assistant to use the INNR RC250 5 button remote
 #By Allard Katan
-#Version 0.1, November 2024
+#Modified to support multiple Zigbee integrations (ZHA, Zigbee2MQTT, deCONZ)
+#Version 0.2, November 2024
 #This blueprint is open source software distributed under the GPLV3 license
 
 blueprint:
   domain: automation
-  name: INNR RC250 remote 3 mode blueprint
+  name: INNR RC250 remote 3 mode blueprint (Zigbee2MQTT)
   description: >-
-    Blueprint that puts the INNR RC250 five button remote to use for different scenarios. It can either assign an action to each button press ('fixed mode'), cycle through a list of five scenes ('cycle mode'), or control color and brightness of one or more lights (color mode)
-  author: Allard Katan
+    Blueprint that puts the INNR RC250 five button remote to use for different scenarios. It can either assign an action to each button press ('fixed mode'), cycle through a list of five scenes ('cycle mode'), or control color and brightness of one or more lights (color mode). Designed specifically for Zigbee2MQTT integration.
+  author: Allard Katan (Modified for Zigbee2MQTT only)
   homeassistant:
-    min_version: 2024.10.0 # uses modern script syntax with actions, triggers etc so I think this is necessary
+    min_version: 2024.10.0
   input:
     action_type:
       name: Action type
@@ -26,12 +27,10 @@ blueprint:
               value: col
     remote_device_id:
       name: Remote device
+      description: Select your INNR RC250 remote device. Look for a device with "RC250" in the name or model.
       selector:
         device:
-          filter:
-            - integration: "zha"
-              manufacturer: "innr"
-              model: "RC 250"
+          multiple: false
     input_helper:
       name: input helper
       selector:
@@ -39,7 +38,7 @@ blueprint:
           filter:
             - domain: input_text
     light_target:
-      name: Light(s) to affect. To avoid errors, even if you do not use this for lights, please select a valid target here.
+      name: Light(s) to affect
       default: []
       selector:
         entity:
@@ -195,97 +194,90 @@ blueprint:
               max: 99
           default: 10
 
-# device_attr(device_id, 'identifiers') | first | last }}    #gets IEEE from device id
-
 triggers:
+  # Zigbee2MQTT Triggers
   - trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: "on"
+      action: "on"
     id: on_press
     alias: on press on/off
   - trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: "off"
+      action: "off"
     id: off_press
     alias: off press on/off
   - trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: step
-      params:
-        step_mode: 0
-    id: up
+      action: "step"
+      step_mode: 0
+    id: up_press
     alias: up press
   - trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: step
-      params:
-        step_mode: 1
-    id: down
+      action: "step"
+      step_mode: 1
+    id: down_press
     alias: down press
   - alias: left or right press
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: move_to_color_temp
-    id: leftright
+      action: "move_to_color_temp"
+    id: leftright_press
   - alias: long press up
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: move
-      params:
-        move_mode: 0
-    id: long_up
+      action: "move"
+      move_mode: 0
+    id: long_up_press
   - alias: long press down
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: move
-      params:
-        move_mode: 1
-    id: long_down
+      action: "move"
+      move_mode: 1
+    id: long_down_press
   - alias: long press updown_stop
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: stop
+      action: "stop"
     id: long_updown_stop
   - alias: long press right
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: enhanced_move_hue
-      params:
-        move_mode: 1
-    id: long_right
+      action: "enhanced_move_hue"
+      move_mode: 1
+    id: long_right_press
   - alias: long press left
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: enhanced_move_hue
-      params:
-        move_mode: 3
-    id: long_left
+      action: "enhanced_move_hue"
+      move_mode: 3
+    id: long_left_press
   - alias: long press leftright_stop
     trigger: event
-    event_type: zha_event
+    event_type: zigbee2mqtt_device_event
     event_data:
       device_id: !input remote_device_id
-      command: stop_move_step
+      action: "stop_move_step"
     id: long_leftright_stop
 
 conditions: []
@@ -298,18 +290,22 @@ variables:
   col_colortype: !input col_colortype
   light_target: !input light_target
   col_leftright_percentage: !input col_leftright_percentage
+  
+  # Event data extraction for Zigbee2MQTT
+  leftright_value: "{{(trigger.event.data.color_temp_mireds|default(0))|int}}"
+  
   last_leftright_value: "{{0 if (states(input_helper) is none or (not states(input_helper) is in ['200', '285', '370', '454', '588']))  else states(input_helper)}}" 
-  leftright_value: "{{(trigger.event.data.params.color_temp_mireds|default(0))|int}}"
+  
   #right: either we jumped from 588 to 200, or the number was less then it is now, but we did not jump from 200 to 588
   right_was_pressed: >-
-      {{trigger.id == 'leftright' and (
+      {{(trigger.id == 'leftright_press') and (
       (last_leftright_value == 588 and leftright_value == 200 ) or (
       last_leftright_value < leftright_value and not 
       (last_leftright_value==200 and leftright_value ==588))
       )}}
   
   left_was_pressed:
-    "{{trigger.id == 'leftright' and not right_was_pressed}}"
+    "{{trigger.id == 'leftright_press' and not right_was_pressed}}"
     #all other cases with left right press are assigned to left
 
 actions:
@@ -322,23 +318,23 @@ actions:
                 sequence: !input on_fixed
               - conditions: "{{trigger.id == 'off_press'}}"
                 sequence: !input off_fixed
-              - conditions: "{{trigger.id == 'up'}}"
+              - conditions: "{{trigger.id == 'up_press'}}"
                 sequence: !input up_fixed
-              - conditions: "{{trigger.id == 'down'}}"
+              - conditions: "{{trigger.id == 'down_press'}}"
                 sequence: !input down_fixed
               - conditions: "{{left_was_pressed}}"
                 sequence: !input left_fixed
               - conditions: "{{right_was_pressed}}"
                 sequence: !input right_fixed
-              - conditions: "{{trigger.id == 'long_up'}}"
+              - conditions: "{{trigger.id == 'long_up_press'}}"
                 sequence: !input long_up_fixed
-              - conditions: "{{trigger.id == 'long_down'}}"
+              - conditions: "{{trigger.id == 'long_down_press'}}"
                 sequence: !input long_down_fixed
               - conditions: "{{trigger.id == 'long_updown_stop'}}"
                 sequence: !input long_updown_stop_fixed
-              - conditions: "{{trigger.id == 'long_left'}}"
+              - conditions: "{{trigger.id == 'long_left_press'}}"
                 sequence: !input long_left_fixed
-              - conditions: "{{trigger.id == 'long_right'}}"
+              - conditions: "{{trigger.id == 'long_right_press'}}"
                 sequence: !input long_right_fixed
               - conditions: "{{trigger.id == 'long_leftright_stop'}}"
                 sequence: !input long_leftright_stop_fixed
@@ -358,7 +354,7 @@ actions:
                   - action: light.turn_off
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id == 'leftright'}}" #leftright presses, cycle scenes
+              - conditions: "{{trigger.id == 'leftright_press'}}" #leftright presses, cycle scenes
                 sequence:
                   - choose: #if cycling and leftright, choose action based on payload
                       - conditions: "{{leftright_value == 200}}"
@@ -386,21 +382,21 @@ actions:
                           - action: scene.turn_on
                             target:
                               entity_id: !input cycle_scene5
-              - conditions: "{{trigger.id == 'up'}}" #up presses, cycle scenes 
+              - conditions: "{{trigger.id == 'up_press'}}" #up presses, cycle scenes 
                 sequence:
                   - action: light.turn_on
                     data:
                       brightness_step_pct: "{{cycle_updown_percentage|float}}"
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id == 'down'}}" #down presses, cycle scenes
+              - conditions: "{{trigger.id == 'down_press'}}" #down presses, cycle scenes
                 sequence:
                   - action: light.turn_on
                     data:
                       brightness_step_pct: "{{0 - cycle_updown_percentage|float}}"
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id=='long_up'}}"
+              - conditions: "{{trigger.id == 'long_up_press'}}"
                 sequence:
                   - parallel:
                     - repeat:
@@ -416,10 +412,10 @@ actions:
                     - sequence:
                         - wait_for_trigger:
                           - trigger: event
-                            event_type: zha_event
+                            event_type: zigbee2mqtt_device_event
                             event_data:
                               device_id: !input remote_device_id
-                              command: stop
+                              action: stop
                           timeout:
                             seconds: 5
                         - action: input_text.set_value
@@ -432,7 +428,7 @@ actions:
                       entity_id: !input input_helper
                     data:
                       value: "{{last_leftright_value}}"
-              - conditions: "{{trigger.id=='long_down'}}"
+              - conditions: "{{trigger.id == 'long_down_press'}}"
                 sequence:
                   - parallel:
                     - repeat:
@@ -448,10 +444,10 @@ actions:
                     - sequence:
                         - wait_for_trigger:
                           - trigger: event
-                            event_type: zha_event
+                            event_type: zigbee2mqtt_device_event
                             event_data:
                               device_id: !input remote_device_id
-                              command: stop
+                              action: stop
                           timeout:
                             seconds: 5
                         - action: input_text.set_value
@@ -478,21 +474,21 @@ actions:
                   - action: light.turn_off
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id == 'up'}}" #up presses, col mode
+              - conditions: "{{trigger.id == 'up_press'}}" #up presses, col mode
                 sequence:
                   - action: light.turn_on
                     data:
                       brightness_step_pct: "{{col_updown_percentage|int}}"
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id == 'down'}}" #down presses, col mode
+              - conditions: "{{trigger.id == 'down_press'}}" #down presses, col mode
                 sequence:
                   - action: light.turn_on
                     data:
                       brightness_step_pct: "{{0-col_updown_percentage|int}}"
                     target: 
                       entity_id: !input light_target
-              - conditions: "{{trigger.id=='leftright'}}"
+              - conditions: "{{trigger.id == 'leftright_press'}}"
                 sequence:
                   - variables:
                       current_ct: "{{2202 if state_attr(light_target[0],'color_temp_kelvin') is none else state_attr(light_target[0],'color_temp_kelvin')|int }}" 
@@ -517,7 +513,7 @@ actions:
                           #saturation = 100, calculate remainder to get rid of overshoots
                         target: 
                           entity_id: !input light_target
-              - conditions: "{{trigger.id=='long_up'}}"
+              - conditions: "{{trigger.id == 'long_up_press'}}"
                 sequence:
                   - parallel:
                     - repeat:
@@ -533,10 +529,10 @@ actions:
                     - sequence:
                         - wait_for_trigger:
                           - trigger: event
-                            event_type: zha_event
+                            event_type: zigbee2mqtt_device_event
                             event_data:
                               device_id: !input remote_device_id
-                              command: stop
+                              action: stop
                           timeout:
                             seconds: 5
                         - action: input_text.set_value
@@ -549,7 +545,7 @@ actions:
                       entity_id: !input input_helper
                     data:
                       value: "{{last_leftright_value}}"
-              - conditions: "{{trigger.id=='long_down'}}"
+              - conditions: "{{trigger.id == 'long_down_press'}}"
                 sequence:
                   - parallel:
                     - repeat:
@@ -565,10 +561,10 @@ actions:
                     - sequence:
                         - wait_for_trigger:
                           - trigger: event
-                            event_type: zha_event
+                            event_type: zigbee2mqtt_device_event
                             event_data:
                               device_id: !input remote_device_id
-                              command: stop
+                              action: stop
                           timeout:
                             seconds: 5
                         - action: input_text.set_value
@@ -581,7 +577,7 @@ actions:
                       entity_id: !input input_helper
                     data:
                       value: "{{last_leftright_value}}"
-              - conditions: "{{trigger.id =='long_right' or trigger.id == 'long_left' }}"
+              - conditions: "{{trigger.id in ['long_right_press', 'long_left_press']}}"
                 sequence:
                   - parallel:
                     - sequence:
@@ -589,7 +585,7 @@ actions:
                           current_ct: "{{2202 if state_attr(light_target[0],'color_temp_kelvin') is none else state_attr(light_target[0],'color_temp_kelvin')|float }}" 
                           current_hue: "{{180 if state_attr(light_target[0],'hs_color') is none else state_attr(light_target[0],'hs_color')[0]|float }}"
                           difval_abs: "{{col_leftright_percentage|float * 12 if col_colortype == 'kelvin' else col_leftright_percentage|float * 0.9 }}"
-                          difval: "{{difval_abs if trigger.id=='long_right' else 0 - difval_abs }}"
+                          difval: "{{difval_abs if trigger.id == 'long_right_press' else 0 - difval_abs }}"
                       - repeat:
                           sequence:
                             - if:
@@ -614,10 +610,10 @@ actions:
                     - sequence:
                         - wait_for_trigger:
                           - trigger: event
-                            event_type: zha_event
+                            event_type: zigbee2mqtt_device_event
                             event_data:
                               device_id: !input remote_device_id
-                              command: stop_move_step
+                              action: stop_move_step
                           timeout:
                             seconds: 5
                         - action: input_text.set_value
@@ -632,7 +628,7 @@ actions:
                       value: "{{last_leftright_value}}"
   - if:
       - condition: trigger
-        id: leftright
+        id: leftright_press
     then:
       - action: input_text.set_value
         target:
@@ -640,4 +636,4 @@ actions:
         data:
           value: "{{leftright_value}}"
 mode: queued
-max: 5
+max: 5 
